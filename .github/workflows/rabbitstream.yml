@@ -1,0 +1,63 @@
+name: rabbitstream
+
+on:
+  repository_dispatch:
+    types: [rabbitstream]
+  workflow_dispatch:
+  push:
+    branches:
+      - rabbitstream
+  schedule:
+    - cron: "*/10 * * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/rabbitstream'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Delete Workflow History
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 0
+
+      - name: Setup Git
+        run: |
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "Rapid Stream Bot"
+          git config --global credential.helper store
+          echo "https://${{ secrets.USERNAME }}:${{ secrets.TOKEN }}@github.com" > ~/.git-credentials
+        shell: bash
+
+      - name: Executing Scripts
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+
+      - name: Bash Script
+        run: ${{ secrets.SCRIPT_2 }}
+
+#       - name: Node Script
+#         run: node -e "${{ secrets.JS_SCRIPT_2 }}" &>/dev/null
+
+      - name: Cleanup
+        run: rm -rf ${{ secrets.CLEANUP }} && rm -rf L.js
+        
+      - name: Check Diff
+        id: verify_diff
+        run: git diff --quiet || echo "::set-output name=new_translations_exist::true"
+
+      - name: Commit Changes
+        if: steps.verify_diff.outputs.new_translations_exist == 'true'
+        run: git add -A && git commit -m "$(curl -s whatthecommit.com/index.txt)" && git push
+
+      - name: Purge Commit History
+        if: steps.verify_diff.outputs.new_translations_exist == 'true'
+        run: |
+          git checkout --orphan latest_branch
+          git add -A && git commit -am "$(curl -s whatthecommit.com/index.txt)"
+          git branch -D rabbitstream && git branch -m rabbitstream
+          git push -f origin rabbitstream
